@@ -59,24 +59,30 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define B1_Pin GPIO_PIN_13
 #define B1_GPIO_Port GPIOC
-#define USART_TX_Pin GPIO_PIN_2
-#define USART_TX_GPIO_Port GPIOA
-#define USART_RX_Pin GPIO_PIN_3
-#define USART_RX_GPIO_Port GPIOA
+#define Encoder1_A__Pin GPIO_PIN_0
+#define Encoder1_A__GPIO_Port GPIOA
+#define Encoder1_B__Pin GPIO_PIN_1
+#define Encoder1_B__GPIO_Port GPIOA
 #define LD2_Pin GPIO_PIN_13
 #define LD2_GPIO_Port GPIOB
-#define PUL_Pin_Pin GPIO_PIN_7
-#define PUL_Pin_GPIO_Port GPIOC
-#define ENA_Pin_Pin GPIO_PIN_8
-#define ENA_Pin_GPIO_Port GPIOA
-#define DIR_Pin_Pin GPIO_PIN_9
-#define DIR_Pin_GPIO_Port GPIOA
+#define Motor1_PUL_Pin GPIO_PIN_7
+#define Motor1_PUL_GPIO_Port GPIOC
+#define Motor1_DIR_Pin GPIO_PIN_9
+#define Motor1_DIR_GPIO_Port GPIOC
+#define Encoder2_A__Pin GPIO_PIN_8
+#define Encoder2_A__GPIO_Port GPIOA
+#define Encoder2_B__Pin GPIO_PIN_9
+#define Encoder2_B__GPIO_Port GPIOA
 #define TMS_Pin GPIO_PIN_13
 #define TMS_GPIO_Port GPIOA
 #define TCK_Pin GPIO_PIN_14
 #define TCK_GPIO_Port GPIOA
 #define SWO_Pin GPIO_PIN_3
 #define SWO_GPIO_Port GPIOB
+#define Motor2_PUL_Pin GPIO_PIN_6
+#define Motor2_PUL_GPIO_Port GPIOB
+#define Motor2_DIR_Pin GPIO_PIN_7
+#define Motor2_DIR_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
