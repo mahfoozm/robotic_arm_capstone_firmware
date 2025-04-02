@@ -146,6 +146,13 @@ int enqueueCommand(CommandQueue *q, const char *cmd) {
     return 0;
 }
 
+int flushQueue(CommandQueue *q)
+{
+    q->head = 0;
+    q->tail = 0;
+    return 0;
+}
+
 int dequeueCommand(CommandQueue *q, char *cmd, size_t maxLen) {
     if (isQueueEmpty(q)) {
         return -1;
@@ -298,6 +305,12 @@ void parseCommand(const char *line)
             const char *err2 = "ERR: motorNum invalid\n";
             HAL_UART_Transmit(&huart2, (uint8_t*)err2, strlen(err2), 100);
         }
+    }
+    else if (line[0] == 'H')
+    {
+        flushQueue(&commandQueue);
+        const char *msg = "Command queue cleared\n";
+        HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), 100);
     }
     else if (strncmp(line, "GET:E:", 6) == 0)
     {
