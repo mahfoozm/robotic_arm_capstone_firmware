@@ -136,6 +136,13 @@ int isQueueFull(CommandQueue *q) {
     return (((q->tail + 1) % CMD_QUEUE_SIZE) == q->head);
 }
 
+int flushQueue(CommandQueue *q)
+{
+    q->head = 0;
+    q->tail = 0;
+    return 0;
+}
+
 int enqueueCommand(CommandQueue *q, const char *cmd) {
     if (isQueueFull(q)) {
         return -1;
@@ -299,6 +306,16 @@ void parseCommand(const char *line)
             HAL_UART_Transmit(&huart2, (uint8_t*)err2, strlen(err2), 100);
         }
     }
+    else if (line[0] == 'H')
+    {
+        flushQueue(&cmdQueue);
+        motor1_stepsRemaining = 0;
+        motor2_stepsRemaining = 0;
+        motor1_resetting = false;
+        motor2_resetting = false;
+        const char *msg = "Command queue cleared and motors stopped\n";
+        HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), 100);
+    }
     else if (strncmp(line, "GET:E:", 6) == 0)
     {
         uint8_t motorNum = 0;
@@ -332,8 +349,9 @@ void parseCommand(const char *line)
     }
     else
     {
-        const char *err = "ERR: Unknown command\n";
-        HAL_UART_Transmit(&huart2, (uint8_t*)err, strlen(err), 100);
+        char dbgMsg[CMD_MAX_LENGTH + 30];
+        sprintf(dbgMsg, "ERR: Unknown command: '%s'\n", line);
+        HAL_UART_Transmit(&huart2, (uint8_t*)dbgMsg, strlen(dbgMsg), 100);
     }
 }
 

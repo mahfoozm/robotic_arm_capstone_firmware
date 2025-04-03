@@ -34,34 +34,34 @@ $(wildcard ../makefile.init) \
 $(wildcard ../makefile.targets) \
 
 
-BUILD_ARTIFACT_NAME := capstone_arm
+BUILD_ARTIFACT_NAME := robotic_arm_capstone_firmware
 BUILD_ARTIFACT_EXTENSION := elf
 BUILD_ARTIFACT_PREFIX :=
 BUILD_ARTIFACT := $(BUILD_ARTIFACT_PREFIX)$(BUILD_ARTIFACT_NAME)$(if $(BUILD_ARTIFACT_EXTENSION),.$(BUILD_ARTIFACT_EXTENSION),)
 
 # Add inputs and outputs from these tool invocations to the build variables 
 EXECUTABLES += \
-capstone_arm.elf \
+robotic_arm_capstone_firmware.elf \
 
 MAP_FILES += \
-capstone_arm.map \
+robotic_arm_capstone_firmware.map \
 
 SIZE_OUTPUT += \
 default.size.stdout \
 
 OBJDUMP_LIST += \
-capstone_arm.list \
+robotic_arm_capstone_firmware.list \
 
 
 # All Target
 all: main-build
 
 # Main-build Target
-main-build: capstone_arm.elf secondary-outputs
+main-build: robotic_arm_capstone_firmware.elf secondary-outputs
 
 # Tool invocations
-capstone_arm.elf capstone_arm.map: $(OBJS) $(USER_OBJS) C:\Users\Mohammad\ Mahfooz\STM32CubeIDE\workspace_1.18.0\capstone_arm\STM32F302R8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "capstone_arm.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\Mohammad Mahfooz\STM32CubeIDE\workspace_1.18.0\capstone_arm\STM32F302R8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="capstone_arm.map" -Wl,--gc-sections -static -u _scanf_float -u _printf_float --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+robotic_arm_capstone_firmware.elf robotic_arm_capstone_firmware.map: $(OBJS) $(USER_OBJS) /Users/mohammadmahfooz/STM32CubeIDE/workspace_1.18.0/robotic_arm_capstone_firmware/STM32F302R8TX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "robotic_arm_capstone_firmware.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/mohammadmahfooz/STM32CubeIDE/workspace_1.18.0/robotic_arm_capstone_firmware/STM32F302R8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="robotic_arm_capstone_firmware.map" -Wl,--gc-sections -static -u _scanf_float -u _printf_float --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -70,14 +70,14 @@ default.size.stdout: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
 	@echo 'Finished building: $@'
 	@echo ' '
 
-capstone_arm.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "capstone_arm.list"
+robotic_arm_capstone_firmware.list: $(EXECUTABLES) makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-objdump -h -S $(EXECUTABLES) > "robotic_arm_capstone_firmware.list"
 	@echo 'Finished building: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) capstone_arm.elf capstone_arm.list capstone_arm.map default.size.stdout
+	-$(RM) default.size.stdout robotic_arm_capstone_firmware.elf robotic_arm_capstone_firmware.list robotic_arm_capstone_firmware.map
 	-@echo ' '
 
 secondary-outputs: $(SIZE_OUTPUT) $(OBJDUMP_LIST)
