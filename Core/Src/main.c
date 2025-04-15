@@ -240,6 +240,9 @@ int32_t getEncoderPos(uint8_t motorNum)
   return 0;
 }
 
+static int32_t motor1_currentSteps = 0;
+
+
 
 /**
  * @brief Parse a command line and act on it.
@@ -251,9 +254,9 @@ int32_t getEncoderPos(uint8_t motorNum)
 void parseCommand(const char *line)
 {
     char resp[80];
-    if (line[0] == 'M')
+    if (line[0] == 'P')  // Changed from 'M' to 'P' for "Position"
     {
-        uint8_t motorNum = line[1] - '0'; // single-digit motor ID
+        uint8_t motorNum = line[1] - '0';
 
         char *colon1 = strchr(line, ':');
         if (!colon1)
@@ -270,64 +273,27 @@ void parseCommand(const char *line)
             return;
         }
 
-        float movement = strtof(colon1 + 1, NULL);
-        float speedVal = strtof(colon2 + 1, NULL);
+        float targetRev = strtof(colon1 + 1, NULL);  // absolute target in revolutions
+        float speedVal = strtof(colon2 + 1, NULL);   // speed remains a [0.0, 1.0] fraction
 
-        if (movement > 1.0f) movement = 1.0f;
-        if (movement < -1.0f) movement = -1.0f;
         if (speedVal > 1.0f) speedVal = 1.0f;
         if (speedVal < 0.0f) speedVal = 0.0f;
 
-        int32_t steps = (int32_t)llroundf(fabsf(movement) * STEPS_PER_REV);
-        GPIO_PinState dir = (movement >= 0.0f) ? GPIO_PIN_SET : GPIO_PIN_RESET;
+        int32_t currentSteps = getEncoderPos(1);
+        int32_t deltaSteps = targetSteps - currentSteps;
+        GPIO_PinState dir = (deltaSteps >= 0) ? GPIO_PIN_SET : GPIO_PIN_RESET;
+        int32_t stepsToMove = abs(deltaSteps);
         float speedFactor = fabsf(speedVal);
 
         if (motorNum == 1)
         {
-            motor1_stepsRemaining = steps;
+            motor1_stepsRemaining = stepsToMove;
             motor1_direction = dir;
             motor1_speedFactor = speedFactor;
-            sprintf(resp, "Command: M1 => %ld steps, dir=%s, speed=%.2f\n",
-                    (long)steps, (dir==GPIO_PIN_SET)?"fwd":"rev", speedFactor);
-            HAL_UART_Transmit(&huart2, (uint8_t*)resp, strlen(resp), 100);
-        }
-        else if (motorNum == 2)
-        {
-            motor2_stepsRemaining = steps;
-            motor2_direction = dir;
-            motor2_speedFactor = speedFactor;
-            sprintf(resp, "Command: M2 => %ld steps, dir=%s, speed=%.2f\n",
-                    (long)steps, (dir==GPIO_PIN_SET)?"fwd":"rev", speedFactor);
-            HAL_UART_Transmit(&huart2, (uint8_t*)resp, strlen(resp), 100);
-        }
-        else
-        {
-            const char *err2 = "ERR: motorNum invalid\n";
-            HAL_UART_Transmit(&huart2, (uint8_t*)err2, strlen(err2), 100);
-        }
-    }
-    else if (line[0] == 'H')
-    {
-        flushQueue(&commandQueue);
-        const char *msg = "Command queue cleared\n";
-        HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), 100);
-    }
-    else if (strncmp(line, "GET:E:", 6) == 0)
-    {
-        uint8_t motorNum = 0;
-        sscanf(line, "GET:E:%hhu", &motorNum);
-        int32_t pos = getEncoderPos(motorNum);
-        sprintf(resp, "E:%u:POS=%ld\n", (unsigned)motorNum, (long)pos);
-        HAL_UART_Transmit(&huart2, (uint8_t*)resp, strlen(resp), 100);
-    }
-    else if (strncmp(line, "RESET:", 6) == 0)
-    {
-        uint8_t motorNum = line[6] - '0';
-        if (motorNum == 1)
-        {
-            motor1_resetting = true;
-            motor1_speedFactor = 1.0f;
-            sprintf(resp, "Resetting motor 1 to zero position\n");
+            motor1_currentSteps = targetSteps;  // Update position
+
+            sprintf(resp, "Command: P1 => move to %.2f rev (%ld steps), dir=%s, speed=%.2f\n",
+                    targetRev, (long)stepsToMove, (dir==GPIO_PIN_SET)?"fwd":"rev", speedFactor);
             HAL_UART_Transmit(&huart2, (uint8_t*)resp, strlen(resp), 100);
         }
         else if (motorNum == 2)
