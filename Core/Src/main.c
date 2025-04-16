@@ -244,7 +244,7 @@ int32_t getEncoderPos(uint8_t motorNum)
 /**
  * @brief Parse a command line and act on it.
  * Commands:
- *   M<motor_number>:<value>
+ *   M<motor_number>:<step_count>:<speed>
  *   GET:E:<motor_number>
  *   RESET:<motor_number>  // Added RESET command
  */
@@ -270,34 +270,36 @@ void parseCommand(const char *line)
             return;
         }
 
-        float movement = strtof(colon1 + 1, NULL);
+        // Instead of reading a normalized float, we now read an integer step count directly.
+        // The step value can be positive (forward) or negative (reverse).
+        int32_t stepsInput = strtol(colon1 + 1, NULL, 10);
         float speedVal = strtof(colon2 + 1, NULL);
 
-        if (movement > 1.0f) movement = 1.0f;
-        if (movement < -1.0f) movement = -1.0f;
+        // Optionally clip the speed to [0.0, 1.0]
         if (speedVal > 1.0f) speedVal = 1.0f;
         if (speedVal < 0.0f) speedVal = 0.0f;
 
-        int32_t steps = (int32_t)llroundf(fabsf(movement) * STEPS_PER_REV);
-        GPIO_PinState dir = (movement >= 0.0f) ? GPIO_PIN_SET : GPIO_PIN_RESET;
+        // Determine the direction based on the sign of the step count.
+        GPIO_PinState dir = (stepsInput >= 0) ? GPIO_PIN_SET : GPIO_PIN_RESET;
+        int32_t absSteps = (stepsInput >= 0) ? stepsInput : -stepsInput;
         float speedFactor = fabsf(speedVal);
 
         if (motorNum == 1)
         {
-            motor1_stepsRemaining = steps;
+            motor1_stepsRemaining = absSteps;
             motor1_direction = dir;
             motor1_speedFactor = speedFactor;
             sprintf(resp, "Command: M1 => %ld steps, dir=%s, speed=%.2f\n",
-                    (long)steps, (dir==GPIO_PIN_SET)?"fwd":"rev", speedFactor);
+                    (long)absSteps, (dir == GPIO_PIN_SET) ? "fwd" : "rev", speedFactor);
             HAL_UART_Transmit(&huart2, (uint8_t*)resp, strlen(resp), 100);
         }
         else if (motorNum == 2)
         {
-            motor2_stepsRemaining = steps;
+            motor2_stepsRemaining = absSteps;
             motor2_direction = dir;
             motor2_speedFactor = speedFactor;
             sprintf(resp, "Command: M2 => %ld steps, dir=%s, speed=%.2f\n",
-                    (long)steps, (dir==GPIO_PIN_SET)?"fwd":"rev", speedFactor);
+                    (long)absSteps, (dir == GPIO_PIN_SET) ? "fwd" : "rev", speedFactor);
             HAL_UART_Transmit(&huart2, (uint8_t*)resp, strlen(resp), 100);
         }
         else
