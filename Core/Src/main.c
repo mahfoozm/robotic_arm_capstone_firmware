@@ -46,6 +46,7 @@ typedef struct {
 #define STEPS_PER_DEGREE (STEPS_PER_REV / 360.0f)
 #define MIN_STEP_INTERVAL_US 10
 #define MAX_STEP_INTERVAL_US 100000
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -326,7 +327,20 @@ void doMotorStepping(void)
 void parseCommand(const char *line)
 {
     char resp[80];
-    if (line[0] == 'M')
+    // Combined form: D:M1:100:1.0;M2:200:0.5
+    if (line[0]=='D' && line[1]==':')
+    {
+        char buf[CMD_MAX_LENGTH];
+        strncpy(buf, line+2, CMD_MAX_LENGTH-1);
+        buf[CMD_MAX_LENGTH-1] = '\0';
+        char *tok = strtok(buf, ";");
+        while (tok) {
+            parseCommand(tok);
+            tok = strtok(NULL, ";");
+        }
+        return;
+    }
+    else if (line[0] == 'M')
     {
         uint8_t motorNum = line[1] - '0';
 
