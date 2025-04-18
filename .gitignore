@@ -1,0 +1,17 @@
+# STM32CubeIDE Debug output
+Debug/
+*.launch
+*.elf
+*.list
+*.map
+*.o
+*.su
+*.d
+*.a
+*.axf
+*.crf
+*.dep
+*.i
+*.s
+*.bak
+*.log
