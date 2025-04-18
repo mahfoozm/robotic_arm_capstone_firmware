@@ -59,6 +59,7 @@ TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
 
+/* USER CODE BEGIN PV */
 static int32_t motor1_stepsRemaining = 0;
 static int32_t motor2_stepsRemaining = 0;
 
@@ -78,13 +79,15 @@ uint8_t rxChar;
 static char commandBuffer[CMD_MAX_LENGTH];
 static uint16_t commandIndex = 0;
 CommandQueue cmdQueue = { .head = 0, .tail = 0 };
+/* USER CODE END PV */
 
+/* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
-
+/* USER CODE BEGIN PFP */
 void DWT_Init(void);
 static inline void delay_us(uint32_t us);
 void readLine(char *line, size_t maxLen);
@@ -92,6 +95,17 @@ void parseCommand(const char *line);
 int32_t getEncoderPos(uint8_t motorNum);
 void doMotorStepping(void);
 
+int32_t  getEncoderPos(uint8_t motorNum);
+float    calculateAngle(int32_t counts);
+void     parseCommand(const char *line);
+void     doMotorStepping(void);
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+/**
+  * @brief  Initialize the DWT cycle counter for microsecond delays.
+  */
 void DWT_Init(void)
 {
   if (!(CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk))
@@ -102,6 +116,11 @@ void DWT_Init(void)
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 }
 
+// BROKEN USING HAL_DELAY() INSTEAD FIX THIS IF NECESSARY
+///**
+//  * @brief  Provides a delay (in microseconds) using the DWT cycle counter.
+//  * @param  us: Delay in microseconds.
+//  */
 void delay_us(uint32_t us)
 {
     uint32_t start = DWT->CYCCNT;
@@ -109,6 +128,10 @@ void delay_us(uint32_t us)
     while ((DWT->CYCCNT - start) < ticks);
 }
 
+/**
+ * @brief Get the current time in microseconds using DWT.
+ * @return Current time in microseconds.
+ */
 uint32_t get_micros(void)
 {
     return DWT->CYCCNT / (SystemCoreClock / 1000000);
@@ -176,23 +199,128 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
     }
 }
 
-float calculateAngle(int32_t counts)
+int main(void)
 {
-  float angle = ((float)counts / COUNTS_PER_JOINT_REV) * DEGREES_PER_TURN;
-  if (angle > 180.0f)
-      angle -= 360.0f;
-  else if (angle < -180.0f)
-      angle += 360.0f;
-  return angle;
+  HAL_Init();
+
+  SystemClock_Config();
+  DWT_Init();
+
+  MX_GPIO_Init();
+  MX_TIM2_Init();
+  MX_TIM1_Init();
+  MX_USART2_UART_Init();
+
+  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+  HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
+  HAL_UART_Receive_IT(&huart2, &rxChar, 1);
+
+  const char *haro = "\n###################################################\n*********** HELLO JOAQUIN, WELCOME BACK ***********\n###################################################\n";
+  HAL_UART_Transmit(&huart2, (uint8_t*)haro, strlen(haro), 100);
+  const char *initMsg = "(+) initialized, waiting for commands...\n";
+  HAL_UART_Transmit(&huart2, (uint8_t*)initMsg, strlen(initMsg), 100);
+
+  while (1)
+  {
+	char cmd[CMD_MAX_LENGTH];
+	if (dequeueCommand(&cmdQueue, cmd, sizeof(cmd)) == 0) {
+		char echoMsg[80];
+		sprintf(echoMsg, "Received command: %s\n", cmd);
+		HAL_UART_Transmit(&huart2, (uint8_t*)echoMsg, strlen(echoMsg), 100);
+		parseCommand(cmd);
+	}
+
+	doMotorStepping();
+    HAL_Delay(1);
+  }
 }
 
 int32_t getEncoderPos(uint8_t motorNum)
 {
-  if (motorNum == 1)
-    return (int32_t)__HAL_TIM_GET_COUNTER(&htim2);
-  else if (motorNum == 2)
-    return (int32_t)__HAL_TIM_GET_COUNTER(&htim1);
-  return 0;
+    if (motorNum == 1)
+        return (int32_t)__HAL_TIM_GET_COUNTER(&htim2);
+    else if (motorNum == 2)
+        return (int32_t)__HAL_TIM_GET_COUNTER(&htim1);
+    return 0;
+}
+
+float calculateAngle(int32_t counts)
+{
+    float angle = ((float)counts / COUNTS_PER_JOINT_REV) * DEGREES_PER_TURN;
+    if (angle >  180.0f) angle -= 360.0f;
+    if (angle < -180.0f) angle += 360.0f;
+    return angle;
+}
+
+void doMotorStepping(void)
+{
+	uint32_t now_us = get_micros();
+
+    if (motor1_resetting)
+    {
+        int32_t pos = getEncoderPos(1);
+        if (pos == 0)
+        {
+            motor1_resetting = false;
+        }
+        else if (now_us >= motor1_nextStepTime_us)
+        {
+            GPIO_PinState dir = (pos > 0) ? GPIO_PIN_RESET : GPIO_PIN_SET;
+            HAL_GPIO_WritePin(Motor1_DIR_GPIO_Port, Motor1_DIR_Pin, dir);
+            HAL_GPIO_WritePin(Motor1_PUL_GPIO_Port, Motor1_PUL_Pin, GPIO_PIN_SET);
+            delay_us(10);  // 10 us pulse width
+            HAL_GPIO_WritePin(Motor1_PUL_GPIO_Port, Motor1_PUL_Pin, GPIO_PIN_RESET);
+
+            uint32_t interval_us = MAX_STEP_INTERVAL_US - (uint32_t)(motor1_speedFactor * (MAX_STEP_INTERVAL_US - MIN_STEP_INTERVAL_US));
+            if (interval_us < MIN_STEP_INTERVAL_US) interval_us = MIN_STEP_INTERVAL_US;
+            motor1_nextStepTime_us = now_us + interval_us;
+        }
+    }
+    else if (motor1_stepsRemaining > 0 && now_us >= motor1_nextStepTime_us)
+    {
+        HAL_GPIO_WritePin(Motor1_DIR_GPIO_Port, Motor1_DIR_Pin, motor1_direction);
+        HAL_GPIO_WritePin(Motor1_PUL_GPIO_Port, Motor1_PUL_Pin, GPIO_PIN_SET);
+        delay_us(10);
+        HAL_GPIO_WritePin(Motor1_PUL_GPIO_Port, Motor1_PUL_Pin, GPIO_PIN_RESET);
+
+        motor1_stepsRemaining--;
+        uint32_t interval_us = MAX_STEP_INTERVAL_US - (uint32_t)(motor1_speedFactor * (MAX_STEP_INTERVAL_US - MIN_STEP_INTERVAL_US));
+        if (interval_us < MIN_STEP_INTERVAL_US) interval_us = MIN_STEP_INTERVAL_US;
+        motor1_nextStepTime_us = now_us + interval_us;
+    }
+
+    if (motor2_resetting)
+    {
+        int32_t pos = getEncoderPos(2);
+        if (pos == 0)
+        {
+            motor2_resetting = false;
+        }
+        else if (now_us >= motor2_nextStepTime_us)
+        {
+            GPIO_PinState dir = (pos > 0) ? GPIO_PIN_RESET : GPIO_PIN_SET;
+            HAL_GPIO_WritePin(Motor2_DIR_GPIO_Port, Motor2_DIR_Pin, dir);
+            HAL_GPIO_WritePin(Motor2_PUL_GPIO_Port, Motor2_PUL_Pin, GPIO_PIN_SET);
+            delay_us(10);
+            HAL_GPIO_WritePin(Motor2_PUL_GPIO_Port, Motor2_PUL_Pin, GPIO_PIN_RESET);
+
+            uint32_t interval_us = MAX_STEP_INTERVAL_US - (uint32_t)(motor2_speedFactor * (MAX_STEP_INTERVAL_US - MIN_STEP_INTERVAL_US));
+            if (interval_us < MIN_STEP_INTERVAL_US) interval_us = MIN_STEP_INTERVAL_US;
+            motor2_nextStepTime_us = now_us + interval_us;
+        }
+    }
+    else if (motor2_stepsRemaining > 0 && now_us >= motor2_nextStepTime_us)
+    {
+        HAL_GPIO_WritePin(Motor2_DIR_GPIO_Port, Motor2_DIR_Pin, motor2_direction);
+        HAL_GPIO_WritePin(Motor2_PUL_GPIO_Port, Motor2_PUL_Pin, GPIO_PIN_SET);
+        delay_us(10);
+        HAL_GPIO_WritePin(Motor2_PUL_GPIO_Port, Motor2_PUL_Pin, GPIO_PIN_RESET);
+
+        motor2_stepsRemaining--;
+        uint32_t interval_us = MAX_STEP_INTERVAL_US - (uint32_t)(motor2_speedFactor * (MAX_STEP_INTERVAL_US - MIN_STEP_INTERVAL_US));
+        if (interval_us < MIN_STEP_INTERVAL_US) interval_us = MIN_STEP_INTERVAL_US;
+        motor2_nextStepTime_us = now_us + interval_us;
+    }
 }
 
 void parseCommand(const char *line)
@@ -299,116 +427,6 @@ void parseCommand(const char *line)
         sprintf(dbgMsg, "ERR: Unknown command: '%s'\n", line);
         HAL_UART_Transmit(&huart2, (uint8_t*)dbgMsg, strlen(dbgMsg), 100);
     }
-}
-
-void doMotorStepping(void)
-{
-    uint32_t now_us = get_micros();
-
-    if (motor1_resetting)
-    {
-        int32_t pos = getEncoderPos(1);
-        if (pos == 0)
-        {
-            motor1_resetting = false;
-        }
-        else if (now_us >= motor1_nextStepTime_us)
-        {
-            GPIO_PinState dir = (pos > 0) ? GPIO_PIN_RESET : GPIO_PIN_SET;
-            HAL_GPIO_WritePin(Motor1_DIR_GPIO_Port, Motor1_DIR_Pin, dir);
-            HAL_GPIO_WritePin(Motor1_PUL_GPIO_Port, Motor1_PUL_Pin, GPIO_PIN_SET);
-            delay_us(10);  // 10 us pulse width
-            HAL_GPIO_WritePin(Motor1_PUL_GPIO_Port, Motor1_PUL_Pin, GPIO_PIN_RESET);
-
-            uint32_t interval_us = MAX_STEP_INTERVAL_US - (uint32_t)(motor1_speedFactor * (MAX_STEP_INTERVAL_US - MIN_STEP_INTERVAL_US));
-            if (interval_us < MIN_STEP_INTERVAL_US) interval_us = MIN_STEP_INTERVAL_US;
-            motor1_nextStepTime_us = now_us + interval_us;
-        }
-    }
-    else if (motor1_stepsRemaining > 0 && now_us >= motor1_nextStepTime_us)
-    {
-        HAL_GPIO_WritePin(Motor1_DIR_GPIO_Port, Motor1_DIR_Pin, motor1_direction);
-        HAL_GPIO_WritePin(Motor1_PUL_GPIO_Port, Motor1_PUL_Pin, GPIO_PIN_SET);
-        delay_us(10);
-        HAL_GPIO_WritePin(Motor1_PUL_GPIO_Port, Motor1_PUL_Pin, GPIO_PIN_RESET);
-
-        motor1_stepsRemaining--;
-        uint32_t interval_us = MAX_STEP_INTERVAL_US - (uint32_t)(motor1_speedFactor * (MAX_STEP_INTERVAL_US - MIN_STEP_INTERVAL_US));
-        if (interval_us < MIN_STEP_INTERVAL_US) interval_us = MIN_STEP_INTERVAL_US;
-        motor1_nextStepTime_us = now_us + interval_us;
-    }
-
-    if (motor2_resetting)
-    {
-        int32_t pos = getEncoderPos(2);
-        if (pos == 0)
-        {
-            motor2_resetting = false;
-        }
-        else if (now_us >= motor2_nextStepTime_us)
-        {
-            GPIO_PinState dir = (pos > 0) ? GPIO_PIN_RESET : GPIO_PIN_SET;
-            HAL_GPIO_WritePin(Motor2_DIR_GPIO_Port, Motor2_DIR_Pin, dir);
-            HAL_GPIO_WritePin(Motor2_PUL_GPIO_Port, Motor2_PUL_Pin, GPIO_PIN_SET);
-            delay_us(10);
-            HAL_GPIO_WritePin(Motor2_PUL_GPIO_Port, Motor2_PUL_Pin, GPIO_PIN_RESET);
-
-            uint32_t interval_us = MAX_STEP_INTERVAL_US - (uint32_t)(motor2_speedFactor * (MAX_STEP_INTERVAL_US - MIN_STEP_INTERVAL_US));
-            if (interval_us < MIN_STEP_INTERVAL_US) interval_us = MIN_STEP_INTERVAL_US;
-            motor2_nextStepTime_us = now_us + interval_us;
-        }
-    }
-    else if (motor2_stepsRemaining > 0 && now_us >= motor2_nextStepTime_us)
-    {
-        HAL_GPIO_WritePin(Motor2_DIR_GPIO_Port, Motor2_DIR_Pin, motor2_direction);
-        HAL_GPIO_WritePin(Motor2_PUL_GPIO_Port, Motor2_PUL_Pin, GPIO_PIN_SET);
-        delay_us(10);
-        HAL_GPIO_WritePin(Motor2_PUL_GPIO_Port, Motor2_PUL_Pin, GPIO_PIN_RESET);
-
-        motor2_stepsRemaining--;
-        uint32_t interval_us = MAX_STEP_INTERVAL_US - (uint32_t)(motor2_speedFactor * (MAX_STEP_INTERVAL_US - MIN_STEP_INTERVAL_US));
-        if (interval_us < MIN_STEP_INTERVAL_US) interval_us = MIN_STEP_INTERVAL_US;
-        motor2_nextStepTime_us = now_us + interval_us;
-    }
-}
-
-int main(void)
-{
-  HAL_Init();
-
-  SystemClock_Config();
-
-  DWT_Init();
-
-  MX_TIM2_Init();
-  MX_TIM1_Init();
-  MX_USART2_UART_Init();
-
-  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
-  HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
-  HAL_UART_Receive_IT(&huart2, &rxChar, 1);
-
-  const char *haro1 = "###################################################\n";
-  const char *haro = "*********** HELLO JOAQUIN, WELCOME BACK ***********\n";
-  HAL_UART_Transmit(&huart2, (uint8_t*)haro1, strlen(haro1), 100);
-  HAL_UART_Transmit(&huart2, (uint8_t*)haro, strlen(haro), 100);
-  HAL_UART_Transmit(&huart2, (uint8_t*)haro1, strlen(haro1), 100);
-  const char *initMsg = "(+) initialized, waiting for commands...\n";
-  HAL_UART_Transmit(&huart2, (uint8_t*)initMsg, strlen(initMsg), 100);
-
-  while (1)
-  {
-	char cmd[CMD_MAX_LENGTH];
-	if (dequeueCommand(&cmdQueue, cmd, sizeof(cmd)) == 0) {
-		char echoMsg[80];
-		sprintf(echoMsg, "Received command: %s \n", cmd);
-		HAL_UART_Transmit(&huart2, (uint8_t*)echoMsg, strlen(echoMsg), 100);
-		parseCommand(cmd);
-	}
-
-	doMotorStepping();
-    HAL_Delay(1);
-  }
 }
 
 void SystemClock_Config(void)
